@@ -1,4 +1,4 @@
-PyQt5==5.10
+PyQt5==5.15.0
 numpy==1.18.2
 matplotlib==3.2.1
 pandas==1.0.3
