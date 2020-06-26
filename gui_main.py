@@ -108,7 +108,9 @@ class MainGui(Ui_Gui):
         alpha = float(self.alphaDoubleSpinBox.text())
         models_picked = self.get_models_configs()
 
-        self.startProgressBar(models_picked, self.input_data, self.obs_data, alpha)
+        self.progressBar.setValue(0)
+        self.progressBarLabel.setText('0%')
+        self.startProgressBar(models_picked, self.input_data, self.obs_data, alpha, self.calculate_uncertainty)
 
     def get_data(self, data):
         if not self.canvas_created:
@@ -125,11 +127,12 @@ class MainGui(Ui_Gui):
         self.checkButton.setEnabled(True)
         self.ModelsPushButton.setEnabled(True)
 
-    def startProgressBar(self, models, input, obs, alpha):
-        self.thread = ThreadClass(models, input, obs, alpha)
+    def startProgressBar(self, models, input, obs, alpha, calculate_uncertainty):
+        self.thread = ThreadClass(models, input, obs, alpha, calculate_uncertainty)
         self.thread.notifyProgress.connect(self.progressBar.setValue)
         self.thread.notifyProgressLabel.connect(self.progressBarLabel.setText)
         self.thread.finalData.connect(self.get_data)
+        self.thread.notifyCalculationsLabel.connect(self.calculationsLabel.setText)
         self.thread.start()
 
     def close_button_clicked(self):
@@ -155,8 +158,13 @@ class MainGui(Ui_Gui):
 
                 data = elem[1]
                 model_type = data.model_type
-                params = [f'{i}={j}({round_sig(j)})'
-                          for i, j, k in zip(self.params[model_type]['csv'], data.params, data.params_accuracy)]
+
+                if data.params_accuracy is not None:
+                    params = [f'{i}={j}({round_sig(j)})'
+                              for i, j, k in zip(self.params[model_type]['csv'], data.params, data.params_accuracy)]
+                else:
+                    params = [f'{i}={j}(-)' for i, j in zip(self.params[model_type]['csv'], data.params)]
+
                 beta = data.beta
                 x_o, y_o = data.output
 
@@ -254,6 +262,8 @@ class MainGui(Ui_Gui):
 
     def go_back_button_clicked(self):
         """ Change page to configuration. """
+        self.progressBarLabel.setText('0%')
+        self.progressBar.setValue(0)
         self.stackedWidget.setCurrentIndex(0)
 
     def plots_button_clicked(self):
@@ -391,8 +401,15 @@ class MainGui(Ui_Gui):
         self.betaTextBrowser.setText(f'{data.beta}' if data.beta else '-')
 
         params = self.params[data.model_type]['display']
-        self.paramsTextBrowser.setText(', '.join(f'{i} = {j} ({round_sig(k)})'
-                                                 for i, j, k in zip(params, data.params, data.params_accuracy)))
+
+        if data.params_accuracy is not None:
+            text = ', '.join(f'{i} = {j} ({round_sig(k)})'
+                             for i, j, k in zip(params, data.params, data.params_accuracy))
+        else:
+            text = ', '.join(f'{i} = {j} (-)' for i, j in zip(params, data.params))
+
+        self.paramsTextBrowser.setText(text)
+
         self.modelTextBrowser.setText(data.model_type)
         self.mseTextBrowser.setText(f'{data.mse}')
         self.meTextBrowser.setText(f'{data.model_efficiency}')

@@ -26,8 +26,11 @@ class TableUi(Ui_Table):
         """ Update table with new row. """
         row_position = self.tableWidget.rowCount()
         self.tableWidget.insertRow(row_position)
+        if data.params_accuracy is not None:
+            params = ', '.join([f'{i}({round_sig(j)})' for i, j in zip(data.params, data.params_accuracy)])
+        else:
+            params = ', '.join([f'{i}(-)' for i in data.params])
 
-        params = ', '.join([f'{i}({round_sig(j)})' for i, j in zip(data.params, data.params_accuracy)])
         beta = str(data.beta) if data.beta else '-'
 
         data_list = [name, data.model_type, params, beta, str(data.mse), str(data.model_efficiency)]
