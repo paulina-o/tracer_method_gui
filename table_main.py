@@ -7,7 +7,7 @@ from PyQt5 import QtWidgets
 from tracer_method.core.fitting_result import FittingResult
 
 from gui_utils import round_sig
-from table_base import Ui_Table
+from base.table_base import Ui_Table
 
 
 class TableUi(Ui_Table):

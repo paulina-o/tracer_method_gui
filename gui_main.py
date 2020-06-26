@@ -5,16 +5,19 @@ from pathlib import Path
 from typing import Dict, List
 
 from PyQt5 import QtWidgets, QtCore
+from matplotlib.backends.backend_qt4agg import NavigationToolbar2QT as NavigationToolbar
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 from tracer_method.core.exceptions import FileException
 from tracer_method.core.read_data.read_input_file import read_tritium_file
 from tracer_method.core.read_data.read_observations_file import read_observations
-from tracer_method.core.tritium.tritium_method import tritium_method
 
-from gui_base import Ui_Gui
+from base.gui_base import Ui_Gui
+from calculations_thread import ThreadClass
 from gui_utils import round_sig
 from gui_utils import save_to_csv
+from input_data_plot import Ui_InputPlot
+from output_data_plot import Ui_OutputPlot
 from table_main import TableUi
 
 
@@ -24,7 +27,11 @@ class MainGui(Ui_Gui):
         self.input_file: str = ''
         self.observations_file: str = ''
 
+        self.input_data: List = []
+        self.obs_data: List = []
+
         self.index = 0
+        self.calculate_uncertainty = False
         self.models_list = ['PFM', 'EM', 'EPM', 'DM']
 
         self.model_checked: Dict[str, dict] = {name: False for name in self.models_list}
@@ -40,6 +47,19 @@ class MainGui(Ui_Gui):
         self.fig_dict = {}
         self.canvas_created = False
 
+        self.setup_table()
+        self.setup_data_plots()
+
+    def setup_data_plots(self):
+        self.input_data_form = QtWidgets.QWidget()
+        self.input_data_plot = Ui_InputPlot()
+        self.input_data_plot.setupUi(self.input_data_form)
+
+        self.output_data_form = QtWidgets.QWidget()
+        self.output_data_plot = Ui_OutputPlot()
+        self.output_data_plot.setupUi(self.output_data_form)
+
+    def setup_table(self):
         self.table_form = QtWidgets.QWidget()
         self.table = TableUi()
         self.table.setupUi(self.table_form)
@@ -49,14 +69,32 @@ class MainGui(Ui_Gui):
     def input_file_button_clicked(self):
         """ Get input file name. """
         self.input_file = QtWidgets.QFileDialog.getOpenFileName(None, "Open ", '.', "(*.xlsx *.xls *.csv)")[0]
+
+        try:
+            self.input_data = read_tritium_file(Path(self.input_file))
+        except FileException as e:
+            QtWidgets.QMessageBox.warning(None, 'Error', f'{e.message}. Correct input file!')
+            return
+
         if self.input_file:
             self.inputFileEdit.setText(self.input_file)
+
+        self.showInputDataButton.setEnabled(True)
 
     def output_file_button_clicked(self):
         """ Get observations file name. """
         self.observations_file = QtWidgets.QFileDialog.getOpenFileName(None, "Open ", '.', "(*.xlsx *.xls *.csv)")[0]
+
+        try:
+            self.obs_data = read_observations(Path(self.observations_file))
+        except FileException as e:
+            QtWidgets.QMessageBox.warning(None, 'Error', f'{e.message}. Select observations file!')
+            return
+
         if self.observations_file:
             self.outputFileEdit.setText(self.observations_file)
+
+        self.showObservationsDataButton.setEnabled(True)
 
     def start_button_clicked(self):
         """ Start program. """
@@ -70,13 +108,9 @@ class MainGui(Ui_Gui):
         alpha = float(self.alphaDoubleSpinBox.text())
         models_picked = self.get_models_configs()
 
-        input_data = read_tritium_file(Path(self.input_file))
-        obs_data = read_observations(Path(self.observations_file))
+        self.startProgressBar(models_picked, self.input_data, self.obs_data, alpha)
 
-        final_data = tritium_method(input_data, obs_data, alpha, models_picked)
-
-        self.stackedWidget.setCurrentIndex(1)
-
+    def get_data(self, data):
         if not self.canvas_created:
             self.figure = Figure(figsize=(3, 2), dpi=100)
             self.canvas = FigureCanvas(self.figure)
@@ -86,11 +120,17 @@ class MainGui(Ui_Gui):
             self.canvas_created = True
 
         name = Path(self.observations_file).stem
-        for index, data in enumerate(final_data):
-            self.add_figure(f'{name}', self.figure, data, self.index)
+        self.add_figure(f'{name}', self.figure, data[0], self.index)
 
         self.checkButton.setEnabled(True)
         self.ModelsPushButton.setEnabled(True)
+
+    def startProgressBar(self, models, input, obs, alpha):
+        self.thread = ThreadClass(models, input, obs, alpha)
+        self.thread.notifyProgress.connect(self.progressBar.setValue)
+        self.thread.notifyProgressLabel.connect(self.progressBarLabel.setText)
+        self.thread.finalData.connect(self.get_data)
+        self.thread.start()
 
     def close_button_clicked(self):
         ret = QtWidgets.QMessageBox.question(None, 'Close request', 'Are you sure you want to quit?',
@@ -192,7 +232,6 @@ class MainGui(Ui_Gui):
         else:
             pass
 
-
     def model_check_box_clicked(self, type: str, check_box, group_boxes):
         """ Check model box. """
         state = check_box.isChecked()
@@ -209,6 +248,10 @@ class MainGui(Ui_Gui):
         self.beta_checked[type] = state
         group_box.setEnabled(state)
 
+    def calculate_uncertainty_check_box_clicked(self, selected: bool):
+        """ Check calculate uncertainty option. """
+        self.calculate_uncertainty = selected
+
     def go_back_button_clicked(self):
         """ Change page to configuration. """
         self.stackedWidget.setCurrentIndex(0)
@@ -220,6 +263,90 @@ class MainGui(Ui_Gui):
     def table_button_clicked(self):
         """ Show table with models data. """
         self.table_form.show()
+
+    def check_input_file(self):
+        try:
+            read_tritium_file(Path(self.input_file))
+        except FileException as e:
+            return e.message
+
+        return ''
+
+    def check_observations_file(self):
+        try:
+            read_observations(Path(self.observations_file))
+        except FileException as e:
+            return e.message
+
+        return ''
+
+    def check_configuration(self):
+        """ Check and validate configuration. """
+        files = []
+        models = []
+        input_file = ''
+        obs_file = ''
+        bounds = ''
+
+        if not self.input_file:
+            files.append('input file')
+        else:
+            input_file = self.check_input_file()
+
+        if not self.input_file:
+            files.append('observations file')
+        else:
+            obs_file = self.check_observations_file()
+
+        if self.EMwrnLabel.text() or self.PFMwrnLabel.text() or self.DMwrnLabel.text() or self.EMwrnLabel.text():
+            bounds = 'Set correct bounds'
+
+        if not any(i for i in self.model_checked.values() if i):
+            models = 'Select at least one model'
+
+        if files or bounds or models or input_file or obs_file:
+            files = f'Define {" and ".join(files)}\n' if files else ''
+            models = f'{models}\n' if models else ''
+            input_file = f'Input file: {input_file}\n' if input_file else ''
+            obs_file = f'Observations file: {obs_file}\n' if obs_file else ''
+
+            return f'{files}{bounds}{models}{input_file}{obs_file}'
+
+        return ''
+
+    def input_data_show_clicked(self):
+        """ Show table with models data. """
+        self.figure_input = Figure(figsize=(3, 2), dpi=100)
+        self.canvas_input = FigureCanvas(self.figure_input)
+        self.canvas_input.setMinimumSize(self.canvas_input.size())
+        self.input_data_plot.plotWidgetLayout.addWidget(self.canvas_input)
+
+        self.axes = self.figure_input.add_subplot(111)
+
+        self.axes.plot(self.input_data[0], self.input_data[1], color='blue')
+        self.toolbar = NavigationToolbar(self.canvas_input, None)
+
+        self.input_data_plot.plotWidgetLayout.addWidget(self.toolbar)
+        self.canvas_input.draw()
+
+        self.input_data_form.show()
+
+    def output_data_show_clicked(self):
+        """ Show table with models data. """
+        self.figure_output = Figure(figsize=(3, 2), dpi=100)
+        self.canvas_output = FigureCanvas(self.figure_output)
+        self.canvas_output.setMinimumSize(self.canvas_output.size())
+        self.output_data_plot.plotWidgetLayout.addWidget(self.canvas_output)
+
+        self.axes = self.figure_output.add_subplot(111)
+
+        self.axes.plot(self.obs_data[0], self.obs_data[1], 'x', color='red')
+        self.toolbar = NavigationToolbar(self.canvas_output, None)
+
+        self.output_data_plot.plotWidgetLayout.addWidget(self.toolbar)
+        self.canvas_output.draw()
+
+        self.output_data_form.show()
 
     def item_selected(self):
         """ Set and enable appropriate buttons related to selecting models. """
@@ -237,46 +364,6 @@ class MainGui(Ui_Gui):
             self.checkButton.setText('Check all')
             self.savePushButton.setEnabled(False)
             self.deleteButton.setEnabled(False)
-
-    def check_configuration(self):
-        """ Check and validate configuration. """
-        files = []
-        models = []
-        input_file = ''
-        obs_file = ''
-        bounds = ''
-
-        if not self.input_file:
-            files.append('input file')
-        else:
-            try:
-                read_tritium_file(Path(self.input_file))
-            except FileException as e:
-                input_file = e.message
-
-        if not self.input_file:
-            files.append('observations file')
-        else:
-            try:
-                read_observations(Path(self.observations_file))
-            except FileException as e:
-                obs_file = e.message
-
-        if self.EMwrnLabel.text() or self.PFMwrnLabel.text() or self.DMwrnLabel.text() or self.EMwrnLabel.text():
-            bounds = 'Set correct bounds'
-
-        if not any(i for i in self.model_checked.values() if i):
-            models = 'Select at least one model'
-
-        if files or bounds or models or input_file or obs_file:
-            files = f'Define {" and ".join(files)}\n' if files else ''
-            models = f'{models}\n' if models else ''
-            input_file = f'Input file: {input_file}\n' if input_file else ''
-            obs_file = f'Observations file: {obs_file}\n' if obs_file else ''
-
-            return f'{files}{bounds}{models}{input_file}{obs_file}'
-
-        return ''
 
     def show_plot(self, fig_data):
         """ Show plot. """
@@ -409,6 +496,13 @@ class MainGui(Ui_Gui):
         self.ModelsPushButton.clicked.connect(self.table_button_clicked)
         self.checkButton.clicked.connect(self.check_button_clicked)
         self.plotListWidget.itemChanged.connect(self.item_selected)
+
+        # show data buttons
+        self.showInputDataButton.clicked.connect(self.input_data_show_clicked)
+        self.showObservationsDataButton.clicked.connect(self.output_data_show_clicked)
+
+        # check box
+        self.uncertaintyCheckBox.clicked.connect(self.calculate_uncertainty_check_box_clicked)
 
         # DM
         self.__setup_model_callbacks('DM', self.DMcheckBox, [self.DM_GroupBox, self.DM_timeGroupBox,
