@@ -46,6 +46,8 @@ class MainGui(Ui_Gui):
 
         self.fig_dict = {}
         self.canvas_created = False
+        self.canvas_input_created = False
+        self.canvas_observations_created = False
 
         self.setup_table()
         self.setup_data_plots()
@@ -159,11 +161,11 @@ class MainGui(Ui_Gui):
                 data = elem[1]
                 model_type = data.model_type
 
-                if data.params_accuracy is not None:
-                    params = [f'{i}={j}({round_sig(j)})'
-                              for i, j, k in zip(self.params[model_type]['csv'], data.params, data.params_accuracy)]
+                if data.confidence_interval:
+                    params = [f'{i}={j} {round_sig(k)}'
+                              for i, j, k in zip(self.params[model_type]['csv'], data.params, data.confidence_interval)]
                 else:
-                    params = [f'{i}={j}(-)' for i, j in zip(self.params[model_type]['csv'], data.params)]
+                    params = [f'{i}={j} (-)' for i, j in zip(self.params[model_type]['csv'], data.params)]
 
                 beta = data.beta
                 x_o, y_o = data.output
@@ -326,35 +328,41 @@ class MainGui(Ui_Gui):
 
     def input_data_show_clicked(self):
         """ Show table with models data. """
-        self.figure_input = Figure(figsize=(3, 2), dpi=100)
-        self.canvas_input = FigureCanvas(self.figure_input)
-        self.canvas_input.setMinimumSize(self.canvas_input.size())
-        self.input_data_plot.plotWidgetLayout.addWidget(self.canvas_input)
+        if not self.canvas_input_created:
+            self.figure_input = Figure(figsize=(3, 2), dpi=100)
+            self.canvas_input = FigureCanvas(self.figure_input)
+            self.canvas_input.setMinimumSize(self.canvas_input.size())
+            self.toolbar = NavigationToolbar(self.canvas_input, None)
+            self.input_data_plot.plotWidgetLayout.addWidget(self.canvas_input)
+            self.input_data_plot.plotWidgetLayout.addWidget(self.toolbar)
+            self.canvas_input.draw()
+            self.canvas_input_created = True
 
         self.axes = self.figure_input.add_subplot(111)
 
         self.axes.plot(self.input_data[0], self.input_data[1], color='blue')
-        self.toolbar = NavigationToolbar(self.canvas_input, None)
-
-        self.input_data_plot.plotWidgetLayout.addWidget(self.toolbar)
-        self.canvas_input.draw()
+        self.axes.set_ylabel('Tritium content [T.U.]')
+        self.axes.set_xlabel('Year')
 
         self.input_data_form.show()
 
     def output_data_show_clicked(self):
         """ Show table with models data. """
-        self.figure_output = Figure(figsize=(3, 2), dpi=100)
-        self.canvas_output = FigureCanvas(self.figure_output)
-        self.canvas_output.setMinimumSize(self.canvas_output.size())
-        self.output_data_plot.plotWidgetLayout.addWidget(self.canvas_output)
+        if not self.canvas_observations_created:
+            self.figure_output = Figure(figsize=(3, 2), dpi=100)
+            self.canvas_output = FigureCanvas(self.figure_output)
+            self.canvas_output.setMinimumSize(self.canvas_output.size())
+            self.output_data_plot.plotWidgetLayout.addWidget(self.canvas_output)
+            self.toolbar = NavigationToolbar(self.canvas_output, None)
+            self.output_data_plot.plotWidgetLayout.addWidget(self.toolbar)
+            self.canvas_output.draw()
+            self.canvas_observations_created = True
 
         self.axes = self.figure_output.add_subplot(111)
 
         self.axes.plot(self.obs_data[0], self.obs_data[1], 'x', color='red')
-        self.toolbar = NavigationToolbar(self.canvas_output, None)
-
-        self.output_data_plot.plotWidgetLayout.addWidget(self.toolbar)
-        self.canvas_output.draw()
+        self.axes.set_ylabel('Tritium content [T.U.]')
+        self.axes.set_xlabel('Year')
 
         self.output_data_form.show()
 
@@ -402,13 +410,17 @@ class MainGui(Ui_Gui):
 
         params = self.params[data.model_type]['display']
 
-        if data.params_accuracy is not None:
-            text = ', '.join(f'{i} = {j} ({round_sig(k)})'
-                             for i, j, k in zip(params, data.params, data.params_accuracy))
+        if data.confidence_interval:
+            text = ', '.join(f'{i} = {j} {round_sig(k)}'
+                             for i, j, k in zip(params, data.params, data.confidence_interval))
+
+            text_level = ', '.join(f'{i * 100}% ({j})' for i, j in zip(data.confidence_level, params))
         else:
             text = ', '.join(f'{i} = {j} (-)' for i, j in zip(params, data.params))
+            text_level = ', '.join('-')
 
         self.paramsTextBrowser.setText(text)
+        self.confidenceLevelTextBrowser.setText(text_level)
 
         self.modelTextBrowser.setText(data.model_type)
         self.mseTextBrowser.setText(f'{data.mse}')
@@ -419,6 +431,7 @@ class MainGui(Ui_Gui):
         self.betaTextBrowser.setAlignment(QtCore.Qt.AlignCenter)
         self.paramsTextBrowser.setAlignment(QtCore.Qt.AlignCenter)
         self.modelTextBrowser.setAlignment(QtCore.Qt.AlignCenter)
+        self.confidenceLevelTextBrowser.setAlignment(QtCore.Qt.AlignCenter)
 
     def change_figure(self, item):
         """ Change figure."""
@@ -519,7 +532,7 @@ class MainGui(Ui_Gui):
         self.showObservationsDataButton.clicked.connect(self.output_data_show_clicked)
 
         # check box
-        self.uncertaintyCheckBox.clicked.connect(self.calculate_uncertainty_check_box_clicked)
+        self.accuracyCheckBox.clicked.connect(self.calculate_uncertainty_check_box_clicked)
 
         # DM
         self.__setup_model_callbacks('DM', self.DMcheckBox, [self.DM_GroupBox, self.DM_timeGroupBox,

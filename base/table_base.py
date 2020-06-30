@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Form implementation generated from reading ui file 'table_base.ui'
+# Form implementation generated from reading ui file './base/table_base.ui'
 #
 # Created by: PyQt5 UI code generator 5.10
 #
@@ -10,16 +10,16 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 
 class Ui_Table(object):
     def setupUi(self, Table):
-        Table.setObjectName("Data Table")
-        Table.resize(650, 300)
-        Table.setMinimumSize(QtCore.QSize(650, 300))
+        Table.setObjectName("Table")
+        Table.resize(900, 300)
+        Table.setMinimumSize(QtCore.QSize(900, 300))
         self.gridLayout = QtWidgets.QGridLayout(Table)
         self.gridLayout.setObjectName("gridLayout")
         self.tableWidget = QtWidgets.QTableWidget(Table)
         self.tableWidget.setMinimumSize(QtCore.QSize(110, 80))
         self.tableWidget.setSizeAdjustPolicy(QtWidgets.QAbstractScrollArea.AdjustToContents)
         self.tableWidget.setObjectName("tableWidget")
-        self.tableWidget.setColumnCount(6)
+        self.tableWidget.setColumnCount(7)
         self.tableWidget.setRowCount(0)
         item = QtWidgets.QTableWidgetItem()
         self.tableWidget.setHorizontalHeaderItem(0, item)
@@ -33,6 +33,8 @@ class Ui_Table(object):
         self.tableWidget.setHorizontalHeaderItem(4, item)
         item = QtWidgets.QTableWidgetItem()
         self.tableWidget.setHorizontalHeaderItem(5, item)
+        item = QtWidgets.QTableWidgetItem()
+        self.tableWidget.setHorizontalHeaderItem(6, item)
         self.tableWidget.horizontalHeader().setDefaultSectionSize(100)
         self.tableWidget.horizontalHeader().setStretchLastSection(True)
         self.gridLayout.addWidget(self.tableWidget, 0, 0, 1, 1)
@@ -47,7 +49,7 @@ class Ui_Table(object):
 
     def retranslateUi(self, Table):
         _translate = QtCore.QCoreApplication.translate
-        Table.setWindowTitle(_translate("Table", "Data Table"))
+        Table.setWindowTitle(_translate("Table", "Form"))
         item = self.tableWidget.horizontalHeaderItem(0)
         item.setText(_translate("Table", "Name"))
         item = self.tableWidget.horizontalHeaderItem(1)
@@ -55,10 +57,12 @@ class Ui_Table(object):
         item = self.tableWidget.horizontalHeaderItem(2)
         item.setText(_translate("Table", "Parameters"))
         item = self.tableWidget.horizontalHeaderItem(3)
-        item.setText(_translate("Table", "Beta"))
+        item.setText(_translate("Table", "Confidence Level"))
         item = self.tableWidget.horizontalHeaderItem(4)
-        item.setText(_translate("Table", "MSE"))
+        item.setText(_translate("Table", "Beta"))
         item = self.tableWidget.horizontalHeaderItem(5)
+        item.setText(_translate("Table", "MSE"))
+        item = self.tableWidget.horizontalHeaderItem(6)
         item.setText(_translate("Table", "ME"))
         self.saveButton.setText(_translate("Table", "Save to csv"))
 
